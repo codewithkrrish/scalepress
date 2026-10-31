@@ -6,7 +6,7 @@ The part I'm most pleased with: **the AI runs entirely in your browser.** No upl
 
 The catch, stated up front: the speed is your hardware's speed. A decent laptop GPU finishes in seconds; an older phone can take a few minutes. I'd rather tell you that on the homepage than pretend it's instant.
 
-**Live:** (frontend URL goes here once deployed — see DEPLOY.md)
+**Live:** https://scalepress-app.vercel.app — the code in this repo is exactly what runs there.
 
 ## What it does
 
