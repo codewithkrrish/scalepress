@@ -1,0 +1,14 @@
+# Local deploy tooling (recreate per deploy/README-versions.md)
+deploy/.venv-modal/
+deploy/.venv-beam/
+
+# Beam deploy artifact — regenerated from backend/app.py at deploy time
+deploy/beam/scalepress_core.py
+
+# Python noise
+__pycache__/
+*.pyc
+
+# Backend runtime artifacts if app.py is ever run locally
+backend/weights/
+backend/outputs/
