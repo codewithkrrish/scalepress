@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ScalePress — Free AI Image Upscaler, up to 4K and 8K</title>
+  <meta name="description" content="Upscale and enhance images with AI for free. Real-ESRGAN runs entirely in your browser, on your device — your photos are never uploaded. Scale photos 2x or 4x, target 4K or 8K. No sign-up." />
+  <meta name="theme-color" content="#0B0B0F" />
+  <meta name="robots" content="index, follow" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="ScalePress — Free AI Image Upscaler" />
+  <meta property="og:description" content="Enhance images up to 4K and 8K with AI, free. Processing runs entirely in your browser, on your device — nothing is uploaded." />
+  <meta property="og:site_name" content="ScalePress" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="ScalePress — Free AI Image Upscaler" />
+  <meta name="twitter:description" content="Upscale photos 2x or 4x, target 4K or 8K, restore faces. Free, no sign-up." />
+
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+
+  <!-- JSZip powers the "Download all as ZIP" path. app.js checks for it and
+       falls back to sequential downloads if this CDN is unreachable. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" defer></script>
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="./" aria-label="ScalePress home">
+        <span class="brand-mark" aria-hidden="true">S</span>
+        <span>ScalePress</span>
+      </a>
+      <nav class="header-nav" aria-label="Primary">
+        <a href="#tool">Upscaler</a>
+        <a href="#how">How it works</a>
+        <a class="btn-github" href="https://github.com/codewithkrrish/scalepress" target="_blank" rel="noopener noreferrer">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero container">
+      <span class="eyebrow">Free AI upscaling</span>
+      <h1>Enhance any picture.<br /><span>Up to 4K and 8K.</span></h1>
+      <p>Real AI super-resolution, not a stretch-and-sharpen filter. The AI runs right here in your browser, on your own device — your photos never leave it, and there is no server to wait for.</p>
+      <ul class="hero-points">
+        <li>Real-ESRGAN AI models</li>
+        <li>2x and 4x, 4K / 8K targets</li>
+        <li>100% on-device — nothing is uploaded</li>
+        <li>Free, no sign-up</li>
+      </ul>
+    </section>
+
+    <section class="tool-section container" id="tool" aria-label="AI image upscaler">
+      <p class="section-label">Dropzone</p>
+      <div
+        class="dropzone"
+        id="dropzone"
+        tabindex="0"
+        role="button"
+        aria-label="Add images. Press Enter to browse, or drag and drop image files here."
+      >
+        <div class="dropzone-icon" aria-hidden="true">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="m6 10 6-6 6 6"/><path d="M4 20h16"/></svg>
+        </div>
+        <h2>Drag and drop images here</h2>
+        <p>or <span class="browse">browse from your device</span> — you can also paste with Ctrl+V</p>
+        <p class="dropzone-formats">JPG &nbsp;·&nbsp; PNG &nbsp;·&nbsp; WebP &nbsp;·&nbsp; BMP</p>
+        <input
+          class="visually-hidden"
+          type="file"
+          id="fileInput"
+          accept="image/jpeg,image/png,image/webp,image/bmp,.jpg,.jpeg,.png,.webp,.bmp"
+          multiple
+          tabindex="-1"
+          aria-hidden="true"
+        />
+      </div>
+
+      <div class="server-note" role="note">
+        <p><strong>Good to know:</strong> enhancement runs entirely on your device. The first time you use a model it downloads once (4.9 MB for General Photo) and is cached for later visits. Speed depends on your hardware — a photo takes a few seconds on a strong GPU and can take a few minutes on an older phone. That is the trade for free and private.</p>
+      </div>
+
+      <div class="controls" aria-label="Enhancement settings">
+        <p class="section-label">Settings</p>
+        <div class="controls-grid">
+          <div class="field">
+            <label for="modelSelect">AI model</label>
+            <select id="modelSelect">
+              <option value="general" selected>General Photo — fast, everyday pictures</option>
+              <option value="max">Max Quality — sharpest detail, slower, bigger download</option>
+              <option value="anime">Anime — illustrations and anime art</option>
+            </select>
+            <p class="field-hint">Pick the model that matches your image. The wrong one still works, just less well. Each model downloads once, the first time you use it.</p>
+          </div>
+
+          <div class="field">
+            <label for="scaleSelect">Scale</label>
+            <select id="scaleSelect">
+              <option value="2" selected>2x — faster, gentler</option>
+              <option value="4">4x — maximum size jump</option>
+            </select>
+            <p class="field-hint">Used when the target size below is set to Original scale.</p>
+          </div>
+
+          <div class="field">
+            <label for="targetSelect">Target size</label>
+            <select id="targetSelect">
+              <option value="original" selected>Original scale — use the scale setting</option>
+              <option value="4k">4K — long edge 3840 px</option>
+              <option value="8k">8K — long edge 7680 px</option>
+            </select>
+            <p class="field-hint">A target can run a second AI pass, then trims or pads to the exact size with a plain resize.</p>
+          </div>
+
+          <div class="field">
+            <label id="faceLabel">Face enhancement</label>
+            <div class="toggle-row">
+              <span class="toggle">
+                <input type="checkbox" id="faceToggle" aria-labelledby="faceLabel" />
+                <span class="toggle-track" aria-hidden="true"></span>
+              </span>
+              <span class="toggle-label">Restore faces</span>
+            </div>
+            <p class="field-hint" id="faceHint">Face restore is not available in the browser version yet — the GFPGAN model is too large and has no reliable on-device build. The upscale itself still sharpens faces.</p>
+          </div>
+
+          <div class="field">
+            <label for="formatSelect">Download format</label>
+            <select id="formatSelect">
+              <option value="png" selected>PNG — lossless, biggest files</option>
+              <option value="jpeg">JPG — best for sharing photos</option>
+              <option value="webp">WebP — modern and efficient</option>
+            </select>
+            <p class="field-hint">Enhancement produces PNG. Your browser converts the download if you pick JPG or WebP.</p>
+          </div>
+        </div>
+
+        <div class="enhance-bar">
+          <button class="btn btn-primary" type="button" id="enhanceBtn" disabled>Enhance images</button>
+          <p class="enhance-note">Images are enhanced one at a time, in the order you added them.</p>
+        </div>
+      </div>
+
+      <div class="results-toolbar" id="resultsToolbar">
+        <div class="stats" id="stats" aria-live="polite"></div>
+        <div class="toolbar-actions">
+          <button class="btn btn-ghost btn-small" type="button" id="clearAllBtn">Clear all</button>
+          <button class="btn btn-primary btn-small" type="button" id="downloadAllBtn" disabled>Download all</button>
+        </div>
+      </div>
+
+      <div class="empty-state" id="emptyState">
+        <h3>No images yet</h3>
+        <p>Add a few images above, pick your settings, and press Enhance. Results will appear here, ready to compare and download.</p>
+      </div>
+
+      <div class="results-grid" id="resultsGrid" aria-live="polite"></div>
+
+      <p class="small-print">
+        Your images are processed entirely in your browser and are never uploaded or stored anywhere.
+        Large images are processed in tiles on your device; results are capped at what your device can
+        safely hold in memory, and extremely large files (over 50 MB) are refused — shrink them first,
+        for example with PixelPress.
+      </p>
+    </section>
+
+    <section class="features container" id="how">
+      <p class="section-label">How it works</p>
+      <div class="features-grid">
+        <article class="feature">
+          <h3>Real AI, on your device</h3>
+          <p>Real-ESRGAN — a model trained on millions of photos to rebuild detail that normal resizing just blurs — runs in a background worker in your browser, using your GPU when it can (WebGPU) and your CPU otherwise. Your image is never sent anywhere.</p>
+        </article>
+        <article class="feature">
+          <h3>The honest limits of free</h3>
+          <p>There is no server, no account and no payment — so the speed is your hardware's speed. A strong laptop finishes in seconds; an older phone may need a few minutes, and very large results are capped to what your device can safely hold. The wait is the price.</p>
+        </article>
+        <article class="feature">
+          <h3>What 8K really means</h3>
+          <p>Upscaling to 8K produces an 8K-sized image with AI-rebuilt detail. It cannot recover detail the original never captured — a tiny, blurry source will look cleaner and larger, not magically sharp. Judge it with the before/after slider and zoom.</p>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <div>Built by <a href="https://github.com/codewithkrrish" target="_blank" rel="noopener noreferrer">krrish</a> · <a href="https://github.com/codewithkrrish/scalepress" target="_blank" rel="noopener noreferrer">ScalePress on GitHub</a> · <a href="https://www.instagram.com/krrishx.ai" target="_blank" rel="noopener noreferrer">Instagram</a></div>
+      <div class="footer-note">Processing runs 100% in your browser, on your device.</div>
+    </div>
+  </footer>
+
+  <!-- Comparison modal -->
+  <div class="modal-backdrop" id="compareModal" aria-hidden="true" role="dialog" aria-modal="true" aria-label="Before and after comparison">
+    <div class="modal">
+      <div class="modal-header">
+        <div>
+          <h2 class="modal-title" data-modal-title>Image</h2>
+          <p class="modal-sub" data-modal-sub></p>
+        </div>
+        <button class="icon-btn" type="button" data-close-modal aria-label="Close comparison">×</button>
+      </div>
+
+      <div class="compare-scroll">
+        <div class="compare-stage" data-compare-stage>
+          <span class="compare-label is-left">Enhanced</span>
+          <span class="compare-label is-right">Original</span>
+          <img data-compare-original alt="Original image" />
+          <div class="compare-after" data-compare-after>
+            <img data-compare-enhanced alt="Enhanced image" />
+          </div>
+          <div class="compare-divider" data-compare-divider style="left: 50%;"></div>
+          <button class="compare-handle" type="button" data-compare-handle style="left: 50%;" aria-label="Comparison slider handle">↔</button>
+        </div>
+      </div>
+      <input class="compare-range" type="range" min="0" max="100" value="50" data-compare-range aria-label="Comparison slider" />
+
+      <div class="zoom-row">
+        <label for="zoomRange">Zoom</label>
+        <input type="range" id="zoomRange" min="100" max="300" step="10" value="100" data-zoom-range aria-label="Zoom level" />
+        <span class="zoom-value" data-zoom-label>100%</span>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-primary" type="button" id="modalDownloadBtn">Download enhanced</button>
+        <button class="btn btn-secondary" type="button" data-close-modal>Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-region" id="toastRegion" aria-live="polite"></div>
+</body>
+</html>

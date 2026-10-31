@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="PixelPress">
+  <rect width="64" height="64" rx="14" fill="#0B0B0F"/>
+  <rect x="1" y="1" width="62" height="62" rx="13" fill="none" stroke="#26262E" stroke-width="2"/>
+  <path d="M22 46V18h11.2c5.8 0 10.3 4.1 10.3 9.7 0 5.7-4.5 9.8-10.3 9.8H27v8.5h-5zm5-13.1h6c3 0 5.3-2.1 5.3-5.2 0-3-2.3-5.1-5.3-5.1h-6v10.3z" fill="#E5484D"/>
+  <circle cx="45" cy="45" r="3" fill="#E5484D"/>
+</svg>
