@@ -111,7 +111,12 @@ class FakeWorker {
       const deliver = (data) => queueMicrotask(() => this.emit("message", data));
       deliver({ type: "stage", id: msg.id, stage: "downloading-model", detail: { loaded: 50, total: 100 } });
       deliver({ type: "stage", id: msg.id, stage: "loading-model", detail: { provider: "wasm" } });
-      deliver({ type: "stage", id: msg.id, stage: "enhancing", detail: { done: 1, total: 1 } });
+      // Worker-protocol enhancing events: per-pass tiles plus the
+      // tileSize and tile-loop elapsedMs api.js aggregates into an ETA.
+      // 4 tiles at a steady 1 tile/second keeps the expected ETAs exact.
+      deliver({ type: "stage", id: msg.id, stage: "enhancing", detail: { done: 0, total: 4, tileSize: 256, elapsedMs: 0 } });
+      deliver({ type: "stage", id: msg.id, stage: "enhancing", detail: { done: 2, total: 4, tileSize: 256, elapsedMs: 2000 } });
+      deliver({ type: "stage", id: msg.id, stage: "enhancing", detail: { done: 4, total: 4, tileSize: 256, elapsedMs: 4000 } });
       deliver({ type: "result", id: msg.id, blob: new Blob(["result"], { type: "image/png" }) });
     }
   }
@@ -220,15 +225,27 @@ check("drop added a third entry", entries.size === 3);
 console.log("6) engine client: upscaleOnce against the fake worker…");
 const { upscaleOnce, ApiError } = await import(pathToFileURL(join(root, "js/api.js")).href);
 const stagesSeen = [];
+const enhancingSeen = [];
 try {
   const result = await upscaleOnce(
     pngFile,
     { model: "general", scale: 2, faceEnhance: false },
-    { onStage: (stage) => stagesSeen.push(stage) },
+    {
+      onStage: (stage, detail) => {
+        stagesSeen.push(stage);
+        if (stage === "enhancing") enhancingSeen.push(detail);
+      },
+    },
   );
   check("upscaleOnce resolves with a blob", result.blob && result.blob.size === 6 && result.blob.type === "image/png");
   check("stage callbacks fired (download -> loading -> enhancing)",
     stagesSeen.includes("downloading-model") && stagesSeen.includes("loading-model") && stagesSeen.includes("enhancing"));
+  check("ETA is null before the first tile, exact once tiles land",
+    enhancingSeen.length === 3 &&
+    enhancingSeen[0].etaMs === null &&
+    enhancingSeen[1].done === 2 && enhancingSeen[1].total === 4 && enhancingSeen[1].etaMs === 2000);
+  check("ETA reaches 0 when the last tile lands",
+    enhancingSeen[2].done === 4 && enhancingSeen[2].etaMs === 0);
   check("worker was spawned lazily, once", FakeWorker.instances.length === 1);
   check("worker script is js/worker.js", FakeWorker.instances[0].url.endsWith("/js/worker.js"));
   check("run message carries the resolved model + scale",
@@ -255,6 +272,29 @@ try {
   check("pre-aborted signal rejects", false);
 } catch (err) {
   check("pre-aborted signal rejects with an aborted ApiError", err instanceof ApiError && err.code === "aborted");
+}
+
+console.log("7b) engine client: a two-pass job aggregates tiles + ETA across passes…");
+try {
+  // Pass 2's input (400x320) at the learned 256px tile size is exactly
+  // 4 more tiles, so the whole job is 8 tiles from the first event on.
+  const jobCtx = { id: "harness-job", passes: [{ width: 100, height: 80 }, { width: 400, height: 320 }] };
+  const jobSeen = [];
+  const collect = (pass) => (stage, detail) => {
+    if (stage === "enhancing") jobSeen.push({ pass, ...detail });
+  };
+  await upscaleOnce(pngFile, { model: "general", scale: 4, faceEnhance: false }, { job: jobCtx, onStage: collect(1) });
+  await upscaleOnce(pngFile, { model: "general", scale: 2, faceEnhance: false }, { job: jobCtx, onStage: collect(2) });
+  const p1Mid = jobSeen.find((d) => d.pass === 1 && d.passDone === 2);
+  const p2Mid = jobSeen.find((d) => d.pass === 2 && d.passDone === 2);
+  check("pass 1 already counts pass 2's tiles in the job total",
+    p1Mid && p1Mid.done === 2 && p1Mid.total === 8 && p1Mid.etaMs === 6000);
+  check("pass 2 continues the same job counters and clock",
+    p2Mid && p2Mid.done === 6 && p2Mid.total === 8 && p2Mid.etaMs === 2000);
+  check("job ETA reaches 0 on the final tile of the final pass",
+    jobSeen[jobSeen.length - 1].done === 8 && jobSeen[jobSeen.length - 1].etaMs === 0);
+} catch (err) {
+  check(`multi-pass job aggregation (threw: ${err.message})`, false);
 }
 
 console.log("8) tiling math: plan coverage, invariants, size helpers…");
@@ -362,6 +402,48 @@ const bodyText = window.document.body.textContent;
 check("page copy has no server-era claims",
   !/Hugging Face server|free server|backup server|server is waking|free GPU server/i.test(bodyText));
 check("page copy says processing is on-device", /on your device/i.test(bodyText));
+
+console.log("10) ETA math: projections, blending, clamping, formatting…");
+const eta = await import(pathToFileURL(join(root, "js/eta.js")).href);
+const { estimateRemainingMs, EtaTracker, decayedEtaMs, formatEta, MAX_ETA_MS } = eta;
+check("ETA: null before the first unit lands", estimateRemainingMs({ elapsedMs: 5000, done: 0, total: 10 }) === null);
+check("ETA: null with no elapsed time", estimateRemainingMs({ elapsedMs: 0, done: 1, total: 10 }) === null);
+check("ETA: null for a nonsensical total", estimateRemainingMs({ elapsedMs: 1000, done: 1, total: 0 }) === null);
+check("ETA: exactly 0 at completion", estimateRemainingMs({ elapsedMs: 5000, done: 10, total: 10 }) === 0);
+check("ETA: plain average projection", estimateRemainingMs({ elapsedMs: 10000, done: 5, total: 10 }) === 10000);
+check("ETA: recent rate blends 50/50 with the overall average",
+  estimateRemainingMs({ elapsedMs: 10000, done: 5, total: 20, recent: { elapsedMs: 5000, done: 4 } }) === 42857);
+check("ETA: absurd projections clamp to the one-hour ceiling",
+  estimateRemainingMs({ elapsedMs: 1000, done: 1, total: 100000 }) === MAX_ETA_MS);
+check("ETA: never negative", estimateRemainingMs({ elapsedMs: 1000, done: 9, total: 10 }) >= 0);
+const tracker = new EtaTracker();
+check("tracker: null on the zero sample", tracker.sample(0, 0, 10) === null);
+check("tracker: projects from the running average", tracker.sample(10000, 5, 10) === 10000);
+check("tracker: progress going backwards resets the warmup", tracker.sample(11000, 2, 10) === null);
+check("tracker: after a reset the window re-anchors", tracker.sample(21000, 7, 10) === 6000);
+check("tracker: completion is 0", (() => {
+  const t2 = new EtaTracker();
+  t2.sample(0, 0, 4);
+  t2.sample(2000, 2, 4);
+  return t2.sample(4000, 4, 4) === 0;
+})());
+check("decayedEtaMs counts an estimate down as it ages",
+  decayedEtaMs(20000, 1000, 6000) === 15000 && decayedEtaMs(5000, 1000, 9000) === 0 && decayedEtaMs(null, 1000, 6000) === null);
+check("formatEta speaks in ~seconds and ~minutes left",
+  formatEta(24000) === "~24s left" &&
+  formatEta(80000) === "~1m 20s left" &&
+  formatEta(400) === "~1s left" &&
+  formatEta(0) === "~0s left" &&
+  formatEta(null) === "");
+const { stageLabel } = await import(pathToFileURL(join(root, "js/ui.js")).href);
+check("stage label shows the countdown once an ETA exists",
+  stageLabel("enhancing", { done: 3, total: 12, etaMs: 18000, etaAt: 100000 }, 100000) ===
+    "Enhancing on your device — tile 3 of 12 · ~18s left");
+check("stage label counts the ETA down between progress updates",
+  stageLabel("enhancing", { done: 3, total: 12, etaMs: 18000, etaAt: 100000 }, 105000) ===
+    "Enhancing on your device — tile 3 of 12 · ~13s left");
+check("stage label omits the countdown before the first tile",
+  stageLabel("enhancing", { done: 0, total: 12, etaMs: null }) === "Enhancing on your device — tile 0 of 12…");
 
 console.log(failures.length ? `\nRESULT: FAIL (${failures.length})` : "\nRESULT: PASS");
 process.exit(failures.length ? 1 : 0);

@@ -6,6 +6,7 @@
  */
 
 import { formatBytes, formatDuration } from "./image.js";
+import { formatEta, decayedEtaMs } from "./eta.js";
 
 export function createElement(tag, className, text) {
   const el = document.createElement(tag);
@@ -23,13 +24,32 @@ const STAGE_LABELS = {
   resizing: "Adjusting to the exact target size…",
 };
 
-export function stageLabel(stage, detail) {
+/**
+ * The live time-left text for a stage detail, or "" when there is no
+ * honest estimate yet. detail.etaMs is the estimate api.js computed;
+ * detail.etaAt is when it was computed (stamped by app.js), so the
+ * value counts down between progress events instead of freezing.
+ * While work remains it never displays below ~1s.
+ */
+function etaText(detail, now) {
+  const etaMs = decayedEtaMs(detail?.etaMs, detail?.etaAt, now);
+  if (etaMs == null) return "";
+  return formatEta(Math.max(1000, etaMs));
+}
+
+export function stageLabel(stage, detail, now = Date.now()) {
   if (stage === "enhancing" && detail && detail.total > 0) {
-    return `Enhancing on your device — tile ${detail.done} of ${detail.total}…`;
+    const eta = etaText(detail, now);
+    return eta
+      ? `Enhancing on your device — tile ${detail.done} of ${detail.total} · ${eta}`
+      : `Enhancing on your device — tile ${detail.done} of ${detail.total}…`;
   }
   if (stage === "downloading-model" && detail && detail.total > 0 && detail.loaded > 0) {
     const pct = Math.min(99, Math.round((detail.loaded / detail.total) * 100));
-    return `Downloading the AI model — ${pct}% (first time only)…`;
+    const eta = etaText(detail, now);
+    return eta
+      ? `Downloading the AI model — ${pct}% · ${eta} (first time only)…`
+      : `Downloading the AI model — ${pct}% (first time only)…`;
   }
   return STAGE_LABELS[stage] || "Enhancing on your device…";
 }
@@ -183,7 +203,17 @@ export function updateStats({ statsEl, entries }) {
   };
   const processing = entries.filter((e) => e.status === "processing").length;
   statsEl.append(mk("Images", String(entries.length)), mk("Enhanced", String(done.length)));
-  if (processing) statsEl.appendChild(mk("Working on", String(processing)));
+  if (processing) {
+    statsEl.appendChild(mk("Working on", String(processing)));
+    // Jobs run one at a time, so at most one entry carries a live ETA.
+    const active = entries.find((e) => e.status === "processing");
+    const eta = active?.stageDetail ? etaText(active.stageDetail, Date.now()) : "";
+    if (eta) {
+      const span = document.createElement("span");
+      span.textContent = `· ${eta}`;
+      statsEl.appendChild(span);
+    }
+  }
 }
 
 /* ---------- Comparison modal (with zoom) ---------- */

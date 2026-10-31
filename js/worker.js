@@ -18,7 +18,10 @@
  *        { type: "result", id, blob }
  *        { type: "error", id, message, code }
  * Stages: "downloading-model" (detail {loaded, total}),
- *         "loading-model", "enhancing" (detail {done, total}),
+ *         "loading-model", "enhancing" (detail {done, total,
+ *         tileSize, elapsedMs} — tiles within THIS pass, the tile
+ *         size in use, and ms since this pass's tile loop began;
+ *         js/api.js aggregates these into a whole-job ETA),
  *         "finalizing".
  */
 
@@ -350,7 +353,14 @@ async function runJob(msg) {
     const tileCanvas = new OffscreenCanvas(1, 1);
     const tileCtx = tileCanvas.getContext("2d");
 
-    stage("enhancing", { done: 0, total: plan.total });
+    const tilesStartedAt = performance.now();
+    const enhancingDetail = (done) => ({
+      done,
+      total: plan.total,
+      tileSize,
+      elapsedMs: Math.round(performance.now() - tilesStartedAt),
+    });
+    stage("enhancing", enhancingDetail(0));
     let tilesDone = 0;
     try {
       for (let i = 0; i < plan.tiles.length; i += 1) {
@@ -378,7 +388,7 @@ async function runJob(msg) {
         );
         tilesDone = i + 1;
         provenCombos.add(comboKey);
-        stage("enhancing", { done: tilesDone, total: plan.total });
+        stage("enhancing", enhancingDetail(tilesDone));
       }
     } catch (err) {
       if (err?.code === "aborted") throw err;

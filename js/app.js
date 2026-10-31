@@ -119,6 +119,8 @@ function syncElapsedTicker() {
       for (const entry of entries.values()) {
         if (entry.status === "processing") updateCard(cardFor(entry), entry);
       }
+      // Keep the stats bar's time-left estimate counting down too.
+      updateStats({ statsEl: els.stats, entries: [...entries.values()] });
       syncElapsedTicker();
     }, 1000);
   } else if (!anyProcessing && elapsedTimer) {
@@ -160,7 +162,11 @@ async function processEntry(entry, settings) {
 
   const setStage = (stage, detail) => {
     entry.stage = stage;
-    entry.stageDetail = detail || null;
+    // Stamp when an ETA was computed so the 1s ticker can count the
+    // displayed value down between progress events (see js/eta.js
+    // decayedEtaMs and ui.stageLabel).
+    entry.stageDetail =
+      detail && typeof detail.etaMs === "number" ? { ...detail, etaAt: Date.now() } : detail || null;
     updateCard(cardFor(entry), entry);
   };
 
@@ -173,6 +179,18 @@ async function processEntry(entry, settings) {
       return;
     }
 
+    // Job context for api.js's whole-job ETA: each pass's input size.
+    // Pass i's output becomes pass i+1's input, at the requested scale.
+    const jobPasses = [];
+    let passW = entry.originalWidth;
+    let passH = entry.originalHeight;
+    for (const s of passes) {
+      jobPasses.push({ width: passW, height: passH });
+      passW = passW ? passW * s : null;
+      passH = passH ? passH * s : null;
+    }
+    const job = { id: entry.id, passes: jobPasses };
+
     let currentBlob = entry.file;
     for (let i = 0; i < passes.length; i += 1) {
       const passLabel = passes.length > 1 ? ` (pass ${i + 1} of ${passes.length})` : "";
@@ -181,6 +199,7 @@ async function processEntry(entry, settings) {
         { model: settings.model, scale: passes[i], faceEnhance: settings.faceEnhance },
         {
           onStage: (stage, detail) => setStage(stage, detail),
+          job,
         },
       );
       currentBlob = result.blob;
